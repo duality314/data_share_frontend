@@ -148,6 +148,7 @@
 <script setup>
 import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useAuthStore } from "../store/auth";
 import { api } from "../api";
 
 const router = useRouter();
@@ -191,6 +192,12 @@ async function load() {
 }
 
 function goToDetail(id) {
+  const auth = useAuthStore();
+  if (!auth.token) {
+    router.push({ path: "/login", query: { redirect: `/main/dataset/${id}` } });
+    return;
+  }
+
   router.push(`/main/dataset/${id}`);
 }
 
