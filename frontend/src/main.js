@@ -5,7 +5,8 @@ import vuetify from "./plugins/vuetify";    //UI组件库
 import App from "./App.vue";                //根组件
 
 const app = createApp(App);                 //创建Vue应用实例
-
+// 开发调试：启用 devtools（仅在开发环境用于调试）
+app.config.devtools = true;
 app.use(createPinia());
 app.use(router);
 app.use(vuetify);
