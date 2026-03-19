@@ -1,7 +1,7 @@
 <template>
   <v-app-bar flat elevation="2" color="error">
     <v-app-bar-nav-icon @click="handleMenuClick" class="d-md-none" v-if="!isLoginPage"/>
-    <v-app-bar-title>
+    <v-app-bar-title @click="goMarket" class="cursor-pointer">
       数据共享平台 - 让数据流动起来
     </v-app-bar-title>
 
@@ -52,6 +52,10 @@ function handleMenuClick() {
 function logout() {
   auth.logout();
   router.push("/login");
+}
+
+function goMarket() {
+  router.push("/main/market");
 }
 </script>
 
