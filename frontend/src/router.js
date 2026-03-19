@@ -11,7 +11,7 @@ import { useAuthStore } from "./store/auth";                //引入认证状态
 
 //路由表
 const routes = [
-  { path: "/", redirect: "/login" },
+  { path: "/", redirect: "/main" },
   { path: "/login", name: "login", component: Login },
   {
     path: "/main",
@@ -20,10 +20,10 @@ const routes = [
     redirect: "/main/market",
     meta: { requiresAuth: false },
     children: [
-      { path: "market", name: "market", component: Market },
+      { path: "market", name: "market", component: Market, meta: { requiresAuth: false } },
       { path: "my", name: "my", component: MyData, meta: { requiresAuth: true } },
       { path: "register-data", name: "register-data", component: RegisterData, meta: { requiresAuth: true } },
-      { path: "dataset/:id", name: "dataset-detail", component: DatasetDetail },
+      { path: "dataset/:id", name: "dataset-detail", component: DatasetDetail, meta: { requiresAuth: true } },
       { path: "account", name: "account", component: MyAccount, meta: { requiresAuth: true } },
     ]
   }
@@ -37,11 +37,10 @@ export const router = createRouter({
 
 router.beforeEach((to) => {                 //全局路由守卫（每次跳转页面之前执行）; to:目标URL信息
   const auth = useAuthStore();              //读取登陆状态 auth.token
-  
-  
-  if (to.meta.requiresAuth && !auth.token) {// 检查是否需要登录
-    
-    return {                                // 重定向到登录页，并保存原始目标路径
+
+  // 使用 matched 判断任意一条匹配记录是否需要认证（适用于嵌套路由）
+  if (to.matched.some(r => r.meta && r.meta.requiresAuth) && !auth.token) {
+    return {
       path: "/login",
       query: { redirect: to.fullPath }
     };
