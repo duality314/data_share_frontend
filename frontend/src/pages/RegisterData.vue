@@ -89,15 +89,35 @@
                 class="mb-4"
               ></v-textarea>
 
+              <!-- 上传方式 -->
+              <v-card variant="outlined" class="mb-4">
+                <v-card-text>
+                  <div class="text-subtitle-1 mb-4 font-weight-medium">
+                    <v-icon class="mr-2">mdi-cloud-upload</v-icon>
+                    上传方式
+                  </div>
+
+                  <v-radio-group v-model="storageType" inline>
+                    <v-radio label="本地文件上传" value="local"></v-radio>
+                    <v-radio label="S3 预签名下载URL" value="s3"></v-radio>
+                  </v-radio-group>
+
+                  <v-alert type="info" variant="tonal" density="compact" class="mt-2">
+                    每次提交请选择一种上传方式：本地文件或 S3 预签名下载URL。
+                  </v-alert>
+                </v-card-text>
+              </v-card>
+
               <!-- 文件上传 -->
               <v-card variant="outlined" class="mb-4">
                 <v-card-text>
                   <div class="text-subtitle-1 mb-4 font-weight-medium">
                     <v-icon class="mr-2">mdi-file-upload</v-icon>
-                    选择文件
+                    {{ storageType === "local" ? "选择文件" : "填写S3预签名下载URL" }}
                   </div>
 
                   <v-file-input
+                    v-if="storageType === 'local'"
                     v-model="file"
                     label="点击选择文件"
                     prepend-icon=""
@@ -106,7 +126,6 @@
                     required
                     show-size
                     variant="outlined"
-                    
                   >
                     <template v-slot:selection="{ fileNames }">
                       <v-chip
@@ -122,8 +141,20 @@
                     </template>
                   </v-file-input>
 
+                  <v-text-field
+                    v-else
+                    v-model="s3Url"
+                    label="S3 预签名下载URL"
+                    placeholder="https://bucket.s3.amazonaws.com/path/to/object?..."
+                    prepend-inner-icon="mdi-link-variant"
+                    :rules="s3UrlRules"
+                    required
+                    clearable
+                    variant="outlined"
+                  ></v-text-field>
+
                   <v-alert
-                    v-if="file"
+                    v-if="storageType === 'local' && file"
                     type="success"
                     variant="tonal"
                     density="compact"
@@ -131,6 +162,17 @@
                   >
                     <v-icon start>mdi-check-circle</v-icon>
                     已选择文件：{{ file.name }} ({{ formatSize(file.size) }})
+                  </v-alert>
+
+                  <v-alert
+                    v-if="storageType === 's3' && s3Url"
+                    type="success"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-2"
+                  >
+                    <v-icon start>mdi-check-circle</v-icon>
+                    已填写 S3 URL，提交时将按 S3 模式上传。
                   </v-alert>
                 </v-card-text>
               </v-card>
@@ -143,7 +185,7 @@
                     size="x-large"
                     color="primary"
                     :loading="uploading"
-                    :disabled="!valid || !file"
+                    :disabled="!canUpload"
                     @click="upload"
                   >
                     <v-icon start>mdi-cloud-upload</v-icon>
@@ -197,14 +239,16 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { api } from "../api";
 
 const name = ref("");
 const description = ref("");
 const domain = ref("general");
 const dataType = ref("csv");
+const storageType = ref("local");
 const file = ref(null);
+const s3Url = ref("");
 const fileInput = ref([]);
 const msg = ref("");
 const err = ref("");
@@ -235,7 +279,33 @@ const descriptionRules = [
   (v) => (v && v.length >= 10) || "数据描述至少10个字符",
 ];
 
-const fileRules = [(v) => !!v  || "请选择文件"];
+const fileRules = [
+  (v) => {
+    if (storageType.value !== "local") return true;
+    return !!v || "请选择文件";
+  },
+];
+
+const s3UrlRules = [
+  (v) => {
+    if (storageType.value !== "s3") return true;
+    return !!v || "请输入S3预签名下载URL";
+  },
+  (v) => {
+    if (storageType.value !== "s3") return true;
+    return isValidHttpUrl(v) || "请输入有效的 http/https URL";
+  },
+];
+
+const normalizedStorageType = computed(() =>
+  storageType.value === "s3" ? "s3" : "local"
+);
+
+const canUpload = computed(() => {
+  if (!valid.value) return false;
+  if (normalizedStorageType.value === "local") return !!file.value;
+  return !!s3Url.value?.trim();
+});
 
 // 上传问题，暂时搁置
 // function handleFileChange(files) {
@@ -254,9 +324,31 @@ function formatSize(bytes) {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }
 
+function isValidHttpUrl(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 async function upload() {
   const { valid: isValid } = await formRef.value.validate();
-  if (!isValid || !file.value) return;
+  if (!isValid) return;
+
+  if (normalizedStorageType.value === "local" && !file.value) {
+    err.value = "请选择文件";
+    showError.value = true;
+    return;
+  }
+
+  if (normalizedStorageType.value === "s3" && !isValidHttpUrl(s3Url.value)) {
+    err.value = "请输入有效的S3预签名下载URL";
+    showError.value = true;
+    return;
+  }
 
   msg.value = "";
   err.value = "";
@@ -268,7 +360,13 @@ async function upload() {
     fd.append("description", description.value);
     fd.append("domain", domain.value);
     fd.append("dataType", dataType.value);
-    fd.append("file", file.value);
+    fd.append("storage_type", normalizedStorageType.value);
+
+    if (normalizedStorageType.value === "local") {
+      fd.append("file", file.value);
+    } else {
+      fd.append("s3Url", s3Url.value.trim());
+    }
 
     const { data } = await api.post("/api/datasets", fd, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -289,10 +387,22 @@ function resetForm() {
   description.value = "";
   domain.value = "general";
   dataType.value = "csv";
+  storageType.value = "local";
   file.value = null;
+  s3Url.value = "";
   fileInput.value = [];
   formRef.value?.reset();
 }
+
+watch(storageType, (mode) => {
+  if (mode === "local") {
+    s3Url.value = "";
+  } else {
+    file.value = null;
+    fileInput.value = [];
+  }
+  formRef.value?.resetValidation();
+});
 
 watch(showError, (val) => {
   if (!val) err.value = "";
