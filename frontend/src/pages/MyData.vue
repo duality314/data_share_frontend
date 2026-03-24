@@ -414,26 +414,60 @@ onMounted(fetchSharing);
 //共享给我的
 async function fetchSharedWithMe() {
   const { data } = await api.get("/api/shares/shared-with-me");
-  shareds.value = data.shared.map(x => ({ ...x }));
+  shareds.value = (data.shared || []).map(x => ({ ...x }));
   downloading.value = false;
 }
+
+function normalizeStorageType(record) {
+  const raw = (record?.storage_type ?? record?.storageType ?? "").toString().trim().toLowerCase();
+  if (raw === "local" || raw === "s3") return raw;
+  return "";
+}
+
+function downloadBlob(data, fileName) {
+  const blob = new Blob([data]);
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName || "dataset";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 async function download(r) {
+  err.value = "";
   downloading.value = true;
   try {
-    // 用 blob 下载文件
-    const resp = await api.get(`/api/datasets/${r.datasetId}/download`, { responseType: "blob" });
+    const datasetId = r?.datasetId;
+    if (!datasetId) {
+      throw new Error("缺少 datasetId，无法下载");
+    }
 
-    const blob = new Blob([resp.data]);
-    const url = window.URL.createObjectURL(blob);
+    const storageType = normalizeStorageType(r);
+    if (!storageType) {
+      throw new Error("缺少 storage_type，无法判断下载方式");
+    }
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${r.datasetName || "dataset"}`; // 可加后缀
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    if (storageType === "local") {
+      const resp = await api.get(`/api/datasets/${datasetId}/download`, {
+        responseType: "blob",
+      });
+      downloadBlob(resp.data, `${r.datasetName || "dataset"}`);
+      return;
+    }
 
-    window.URL.revokeObjectURL(url);
+    const { data } = await api.get(`/api/datasets/${datasetId}/download-url`);
+    const downloadUrl = data?.downloadUrl;
+    if (!downloadUrl) {
+      throw new Error("下载链接无效");
+    }
+    window.open(downloadUrl, "_blank", "noopener");
+  } catch (e) {
+    err.value = e?.response?.data?.message || e?.message || "下载失败";
+    showError.value = true;
+    console.error("download error", e);
   } finally {
     downloading.value = false;
   }
