@@ -1,410 +1,401 @@
 <template>
   <v-container fluid>
-    <!-- 页面标题 -->
     <v-row>
       <v-col cols="12">
         <div class="d-flex align-center mb-4">
           <v-icon size="40" color="primary" class="mr-3">mdi-upload</v-icon>
           <div>
-            <h1 class="text-h4 font-weight-bold">数据登记（上传）</h1>
-            <p class="text-subtitle-1 text-grey mb-0">
-              上传您的数据集到平台
-            </p>
+            <h1 class="text-h4 font-weight-bold">数据登记（S3 直传）</h1>
+            <p class="text-subtitle-1 text-grey mb-0">文件将直接上传到 S3，后端仅登记元数据</p>
           </div>
         </div>
       </v-col>
     </v-row>
 
-    <!-- 上传表单 -->
     <v-row justify="center">
       <v-col cols="12" md="10" lg="8">
-        <v-card elevation="3">
-          <v-card-title class="bg-primary text-white text-h5">
-            <v-icon class="mr-2">mdi-form-textbox</v-icon>
-            填写数据集信息
-          </v-card-title>
+        <v-card elevation="2">
+          <v-card-title class="bg-primary text-white text-h6">填写数据集信息</v-card-title>
 
-          <v-card-text class="pa-6">
+          <v-card-text>
             <v-form ref="formRef" v-model="valid">
-              <!-- 数据名称 -->
-              <v-text-field
-                v-model="name"
-                label="数据名称"
-                prepend-inner-icon="mdi-file-document"
-                :rules="nameRules"
-                required
-                clearable
-                variant="outlined"
-                class="mb-2"
-              ></v-text-field>
+              <v-text-field v-model="name" label="数据名称" :rules="nameRules" required clearable />
+              <v-text-field v-model="domain" label="专业领域" :rules="domainRules" placeholder="如：chemistry / finance / general" required clearable />
 
-              <!-- 专业领域 -->
-              <v-text-field
-                v-model="domain"
-                label="专业领域"
-                prepend-inner-icon="mdi-tag"
-                placeholder="如：chemistry / finance / general"
-                :rules="domainRules"
-                required
-                clearable
-                variant="outlined"
-                class="mb-2"
-              >
-                <template v-slot:append-inner>
-                  <v-tooltip location="top">
-                    <template v-slot:activator="{ props }">
-                      <v-icon v-bind="props" color="info"
-                        >mdi-information</v-icon
-                      >
-                    </template>
-                    <span>建议使用英文领域名称</span>
-                  </v-tooltip>
-                </template>
-              </v-text-field>
+              <v-select v-model="dataType" :items="dataTypeOptions" label="数据类型" :rules="dataTypeRules" required />
 
-              <!-- 数据类型 -->
-              <v-select
-                v-model="dataType"
-                label="数据类型"
-                :items="dataTypeOptions"
-                prepend-inner-icon="mdi-file-code"
-                :rules="dataTypeRules"
-                required
-                variant="outlined"
-                class="mb-2"
-              ></v-select>
+              <v-textarea v-model="description" label="数据描述" :rules="descriptionRules" rows="4" counter="500" maxlength="500" required />
 
-              <!-- 数据描述 -->
-              <v-textarea
-                v-model="description"
-                label="数据描述"
-                prepend-inner-icon="mdi-text"
-                placeholder="请输入数据描述，包括数据来源、用途等信息"
-                :rules="descriptionRules"
-                rows="4"
-                counter="500"
-                maxlength="500"
-                required
-                variant="outlined"
-                class="mb-4"
-              ></v-textarea>
+              <v-file-input v-model="file" label="选择文件" :rules="fileRules" show-size truncate-length="40" required />
 
-              <!-- 上传方式 -->
-              <v-card variant="outlined" class="mb-4">
-                <v-card-text>
-                  <div class="text-subtitle-1 mb-4 font-weight-medium">
-                    <v-icon class="mr-2">mdi-cloud-upload</v-icon>
-                    上传方式
-                  </div>
+              <v-divider class="my-4" />
 
-                  <v-radio-group v-model="storageType" inline>
-                    <v-radio label="本地文件上传" value="local"></v-radio>
-                    <v-radio label="S3 预签名下载URL" value="s3"></v-radio>
-                  </v-radio-group>
+              <v-text-field v-model="region" label="Region" :rules="regionRules" required />
+              <v-text-field v-model="bucket" label="Bucket" :rules="bucketRules" required />
+              <v-text-field v-model="endpoint" label="Endpoint（可选）" :rules="endpointRules" />
 
-                  <v-alert type="info" variant="tonal" density="compact" class="mt-2">
-                    每次提交请选择一种上传方式：本地文件或 S3 预签名下载URL。
-                  </v-alert>
-                </v-card-text>
-              </v-card>
+              <v-text-field v-model="accessKeyId" :type="showAccessKey ? 'text' : 'password'" label="Access Key ID" :append-icon="showAccessKey ? 'mdi-eye-off' : 'mdi-eye'" @click:append="showAccessKey = !showAccessKey" :rules="accessKeyRules" required />
+              <v-text-field v-model="secretAccessKey" :type="showSecretKey ? 'text' : 'password'" label="Secret Access Key" :append-icon="showSecretKey ? 'mdi-eye-off' : 'mdi-eye'" @click:append="showSecretKey = !showSecretKey" :rules="secretKeyRules" required />
+              <v-text-field v-model="sessionToken" label="Session Token" :append-icon="showSessionToken ? 'mdi-eye-off' : 'mdi-eye'" @click:append="showSessionToken = !showSessionToken" :rules="sessionTokenRules" required />
 
-              <!-- 文件上传 -->
-              <v-card variant="outlined" class="mb-4">
-                <v-card-text>
-                  <div class="text-subtitle-1 mb-4 font-weight-medium">
-                    <v-icon class="mr-2">mdi-file-upload</v-icon>
-                    {{ storageType === "local" ? "选择文件" : "填写S3预签名下载URL" }}
-                  </div>
+              <v-textarea v-model="credentialJson" label="JSON 凭证（可粘贴 STS JSON 并解析）" rows="3" clearable />
+              <v-btn text small @click="parseCredentialJson">解析凭证</v-btn>
 
-                  <v-file-input
-                    v-if="storageType === 'local'"
-                    v-model="file"
-                    label="点击选择文件"
-                    prepend-icon=""
-                    prepend-inner-icon="mdi-paperclip"
-                    :rules="fileRules"
-                    required
-                    show-size
-                    variant="outlined"
-                  >
-                    <template v-slot:selection="{ fileNames }">
-                      <v-chip
-                        v-for="fileName in fileNames"
-                        :key="fileName"
-                        color="primary"
-                        label
-                        class="mr-2"
-                      >
-                        <v-icon start>mdi-file</v-icon>
-                        {{ fileName }}
-                      </v-chip>
-                    </template>
-                  </v-file-input>
-
-                  <v-text-field
-                    v-else
-                    v-model="s3Url"
-                    label="S3 预签名下载URL"
-                    placeholder="https://bucket.s3.amazonaws.com/path/to/object?..."
-                    prepend-inner-icon="mdi-link-variant"
-                    :rules="s3UrlRules"
-                    required
-                    clearable
-                    variant="outlined"
-                  ></v-text-field>
-
-                  <v-alert
-                    v-if="storageType === 'local' && file"
-                    type="success"
-                    variant="tonal"
-                    density="compact"
-                    class="mt-2"
-                  >
-                    <v-icon start>mdi-check-circle</v-icon>
-                    已选择文件：{{ file.name }} ({{ formatSize(file.size) }})
-                  </v-alert>
-
-                  <v-alert
-                    v-if="storageType === 's3' && s3Url"
-                    type="success"
-                    variant="tonal"
-                    density="compact"
-                    class="mt-2"
-                  >
-                    <v-icon start>mdi-check-circle</v-icon>
-                    已填写 S3 URL，提交时将按 S3 模式上传。
-                  </v-alert>
-                </v-card-text>
-              </v-card>
-
-              <!-- 提交按钮 -->
-              <v-row>
+              <v-row class="mt-4" align="center">
                 <v-col cols="12" md="6">
-                  <v-btn
-                    block
-                    size="x-large"
-                    color="primary"
-                    :loading="uploading"
-                    :disabled="!canUpload"
-                    @click="upload"
-                  >
-                    <v-icon start>mdi-cloud-upload</v-icon>
-                    上传到服务器
-                  </v-btn>
+                  <v-btn :disabled="!canUpload" color="primary" @click="upload">上传并登记</v-btn>
+                  <v-btn class="ml-2" text @click="resetForm">重置</v-btn>
                 </v-col>
-                <v-col cols="12" md="6">
-                  <v-btn
-                    block
-                    size="x-large"
-                    variant="outlined"
-                    color="secondary"
-                    @click="resetForm"
-                  >
-                    <v-icon start>mdi-refresh</v-icon>
-                    重置表单
-                  </v-btn>
+                <v-col cols="12" md="6" class="text-right">
+                  <v-btn v-if="canResume" color="warning" @click="resumeWithNewCredentials">凭证续传</v-btn>
                 </v-col>
               </v-row>
+
+              <v-progress-linear v-if="uploading" :value="progressPercent" class="my-3"></v-progress-linear>
+              <div v-if="msg" class="text-success">{{ msg }}</div>
+              <div v-if="showError" class="text-error">{{ err }}</div>
             </v-form>
           </v-card-text>
         </v-card>
-
-        <!-- 成功提示 -->
-        <v-alert
-          v-if="msg"
-          type="success"
-          variant="tonal"
-          class="mt-4"
-          closable
-          @click:close="msg = ''"
-        >
-          <v-alert-title class="text-h6">上传成功！</v-alert-title>
-          <div class="mt-2">{{ msg }}</div>
-          <template v-slot:append>
-            <v-btn color="success" variant="text" to="/my">
-              去我的数据
-              <v-icon end>mdi-arrow-right</v-icon>
-            </v-btn>
-          </template>
-        </v-alert>
       </v-col>
     </v-row>
-
-    <!-- 错误提示 -->
-    <v-snackbar v-model="showError" color="error" :timeout="3000">
-      <v-icon start>mdi-alert-circle</v-icon>
-      {{ err }}
-    </v-snackbar>
   </v-container>
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import { api } from "../api";
+import { useAuthStore } from "../store/auth";
+
+const STORAGE_PREF_KEY = "registerData.s3.publicPrefs";
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = ["csv", "json", "sql", "txt", "zip", "xlsx", "xls"];
+const DEFAULT_QUEUE_SIZE = 4;
+const DEFAULT_PART_SIZE = 8 * 1024 * 1024;
+
+const auth = useAuthStore();
 
 const name = ref("");
 const description = ref("");
 const domain = ref("general");
 const dataType = ref("csv");
-const storageType = ref("local");
 const file = ref(null);
-const s3Url = ref("");
-const fileInput = ref([]);
-const msg = ref("");
-const err = ref("");
-const uploading = ref(false);
+
+const region = ref("");
+const bucket = ref("");
+const endpoint = ref("");
+const accessKeyId = ref("");
+const secretAccessKey = ref("");
+const sessionToken = ref("");
+
+const showAccessKey = ref(false);
+const showSecretKey = ref(false);
+const showSessionToken = ref(false);
+
+const credentialJson = ref("");
+
 const valid = ref(false);
 const showError = ref(false);
 const formRef = ref(null);
+const msg = ref("");
+const err = ref("");
+const uploading = ref(false);
 
-const dataTypeOptions = [
-  { title: "CSV", value: "csv" },
-  { title: "JSON", value: "json" },
-  { title: "SQL", value: "sql" },
-  { title: "TXT", value: "txt" },
-  { title: "其他", value: "other" },
-];
+const uploadState = ref("idle");
+const progressPercent = ref(0);
+const speedText = ref("-");
+const etaText = ref("-");
 
-const nameRules = [
-  (v) => !!v || "请输入数据名称",
-  (v) => (v && v.length >= 3) || "数据名称至少3个字符",
-];
+const latestS3Key = ref("");
+const pendingResume = ref(null);
 
+const dataTypeOptions = ["csv", "json", "sql", "txt", "xlsx", "other"].map((v) => ({ title: v.toUpperCase(), value: v }));
+
+const nameRules = [(v) => !!v || "请输入数据名称", (v) => (v && v.length >= 3) || "数据名称至少3个字符"];
 const domainRules = [(v) => !!v || "请输入专业领域"];
-
 const dataTypeRules = [(v) => !!v || "请选择数据类型"];
+const descriptionRules = [(v) => !!v || "请输入数据描述", (v) => (v && v.length >= 10) || "数据描述至少10个字符"];
+const fileRules = [(v) => !!v || "请选择文件", (v) => validateFile(v)];
+const regionRules = [(v) => !!v || "请输入 Region"];
+const bucketRules = [(v) => !!v || "请输入 Bucket"];
+const accessKeyRules = [(v) => !!v || "请输入 Access Key ID"];
+const secretKeyRules = [(v) => !!v || "请输入 Secret Access Key"];
+const sessionTokenRules = [(v) => !!v || "请输入 Session Token"];
+const endpointRules = [(v) => !v || isValidHttpUrl(v) || "Endpoint 必须是 http/https 地址"];
 
-const descriptionRules = [
-  (v) => !!v || "请输入数据描述",
-  (v) => (v && v.length >= 10) || "数据描述至少10个字符",
-];
+const canUpload = computed(() => valid.value && file.value && region.value.trim() && bucket.value.trim() && accessKeyId.value.trim() && secretAccessKey.value.trim() && sessionToken.value.trim() && !uploading.value);
+const canResume = computed(() => !!pendingResume.value && uploadState.value === "failed");
 
-const fileRules = [
-  (v) => {
-    if (storageType.value !== "local") return true;
-    return !!v || "请选择文件";
-  },
-];
+let s3ModuleRef = null;
+const getS3Module = async () => (s3ModuleRef ||= await import("../services/s3Upload"));
 
-const s3UrlRules = [
-  (v) => {
-    if (storageType.value !== "s3") return true;
-    return !!v || "请输入S3预签名下载URL";
-  },
-  (v) => {
-    if (storageType.value !== "s3") return true;
-    return isValidHttpUrl(v) || "请输入有效的 http/https URL";
-  },
-];
+const loadPublicS3Prefs = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREF_KEY);
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    region.value = p.region || "";
+    bucket.value = p.bucket || "";
+    endpoint.value = p.endpoint || "";
+  } catch {
+    localStorage.removeItem(STORAGE_PREF_KEY);
+  }
+};
+const persistPublicS3Prefs = () => localStorage.setItem(STORAGE_PREF_KEY, JSON.stringify({ region: region.value.trim(), bucket: bucket.value.trim(), endpoint: endpoint.value.trim() }));
 
-const normalizedStorageType = computed(() =>
-  storageType.value === "s3" ? "s3" : "local"
-);
+const clearSensitiveCredentials = () => {
+  accessKeyId.value = "";
+  secretAccessKey.value = "";
+  sessionToken.value = "";
+  showAccessKey.value = showSecretKey.value = showSessionToken.value = false;
+};
 
-const canUpload = computed(() => {
-  if (!valid.value) return false;
-  if (normalizedStorageType.value === "local") return !!file.value;
-  return !!s3Url.value?.trim();
-});
-
-// 上传问题，暂时搁置
-// function handleFileChange(files) {
-//   if (files && files.length > 0) {
-//     file.value = files[0];
-//   } else {
-//     file.value = null;
-//   }
-// }
+const resetForm = () => {
+  s3ModuleRef?.abortActiveUpload();
+  name.value = "";
+  description.value = "";
+  domain.value = "general";
+  dataType.value = "csv";
+  file.value = null;
+  credentialJson.value = "";
+  clearSensitiveCredentials();
+  msg.value = err.value = "";
+  progressPercent.value = 0;
+  speedText.value = etaText.value = "-";
+  uploadState.value = "idle";
+  pendingResume.value = latestS3Key.value = null;
+  formRef.value?.resetValidation?.();
+};
 
 function formatSize(bytes) {
   if (!bytes) return "0 B";
   const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  return `${Math.round((bytes / Math.pow(k, i)) * 100) / 100} ${sizes[i]}`;
 }
 
-function isValidHttpUrl(url) {
-  if (!url) return false;
+function isValidHttpUrl(u) {
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    const p = new URL(u);
+    return p.protocol === "http:" || p.protocol === "https:";
   } catch {
     return false;
   }
+}
+
+function validateFile(selectedFile) {
+  const target = Array.isArray(selectedFile) ? selectedFile[0] : selectedFile;
+  if (!target) return "请选择文件";
+  if (target.size > MAX_FILE_SIZE) return `文件过大，最大允许 ${formatSize(MAX_FILE_SIZE)}`;
+  const parts = String(target.name || "").split(".");
+  const ext = parts.length > 1 ? parts.pop().toLowerCase() : "";
+  if (!ALLOWED_EXTENSIONS.includes(ext)) return `不支持的文件类型，允许：${ALLOWED_EXTENSIONS.join(", ")}`;
+  return true;
+}
+
+function parseCredentialJson() {
+  if (!credentialJson.value.trim()) {
+    err.value = "请输入 JSON 凭证内容";
+    showError.value = true;
+    return;
+  }
+  try {
+    const p = JSON.parse(credentialJson.value);
+    const accessV = p.accessKeyId || p.AccessKeyId || p.aws_access_key_id;
+    const secretV = p.secretAccessKey || p.SecretAccessKey || p.aws_secret_access_key;
+    const tokenV = p.sessionToken || p.SessionToken || p.Token || p.aws_session_token;
+    if (!accessV || !secretV || !tokenV) throw new Error("JSON 缺少必要字段：accessKeyId、secretAccessKey、sessionToken");
+    accessKeyId.value = String(accessV).trim();
+    secretAccessKey.value = String(secretV).trim();
+    sessionToken.value = String(tokenV).trim();
+    showError.value = false;
+    err.value = "";
+  } catch (e) {
+    err.value = e?.message || "JSON 解析失败";
+    showError.value = true;
+  }
+}
+
+const getS3Config = () => ({
+  region: region.value.trim(),
+  bucket: (bucket.value || "").trim(),
+  endpoint: endpoint.value.trim() || undefined,
+  credentials: { accessKeyId: accessKeyId.value.trim(), secretAccessKey: secretAccessKey.value.trim(), sessionToken: sessionToken.value.trim() },
+});
+
+const getMetadataPayload = (uploaded, selectedFile) => ({
+  // only include fields allowed by backend DatasetUploadIn schema
+  name: name.value.trim(),
+  objectKey: uploaded.s3Key,
+  dataType: dataType.value || "file",
+  description: description.value.trim() || "",
+  domain: domain.value.trim() || "general",
+  fileSize: selectedFile?.size || 0,
+});
+
+const getUploadPrefixUserId = () => String(auth?.user?.id ?? "anonymous");
+
+function updateProgress(uploadedBytes, totalBytes, startedAt) {
+  progressPercent.value = totalBytes > 0 ? (uploadedBytes / totalBytes) * 100 : 0;
+  const elapsed = Math.max((Date.now() - startedAt) / 1000, 1);
+  const speed = uploadedBytes / elapsed;
+  const remain = Math.max(totalBytes - uploadedBytes, 0);
+  const eta = speed > 0 ? remain / speed : 0;
+  speedText.value = `${formatSize(speed)}/s`;
+  etaText.value = eta > 0 ? `${Math.round(eta)}s` : "-";
+}
+
+const doUploadWithCurrentCredentials = async (selectedFile, objectKey) => {
+  const m = await getS3Module();
+  const startedAt = Date.now();
+  return m.uploadFileToS3({ ...getS3Config(), file: selectedFile, key: objectKey, queueSize: DEFAULT_QUEUE_SIZE, partSize: DEFAULT_PART_SIZE, onProgress: ({ loaded, total }) => updateProgress(loaded, total || selectedFile.size, startedAt) });
+};
+
+const classifyError = async (error) => {
+  if (!s3ModuleRef) return { code: String(error?.name || error?.Code || error?.code || "").toLowerCase().includes("expired") ? "credentials_expired" : "unknown" };
+  try {
+    const m = await getS3Module();
+    return m.classifyS3Error(error);
+  } catch {
+    return { code: "unknown" };
+  }
+};
+
+const mapUploadErrorFromCode = (code) => ({
+  credentials_expired: "STS 凭证已过期，请更新 AK/SK/SessionToken 后点击“更新凭证并续传”。",
+  signature_error: "签名错误，请检查 region、bucket、AK/SK/Token 是否匹配。",
+  cors_error: "S3 CORS 配置异常，请检查允许源、允许头、ExposeHeaders 包含 ETag。",
+  network_error: "网络中断，请检查网络后重试。",
+  permission_error: "权限不足，请确认 STS 策略包含上传与删除权限。",
+  unknown: "上传失败，请检查凭证、网络和存储桶策略。",
+}[code] || "上传失败，请检查凭证、网络和存储桶策略。");
+
+const registerMetadata = async (uploaded, selectedFile, objectKey) => {
+  try {
+    const payloadObj = getMetadataPayload(uploaded, selectedFile);
+    const form = new FormData();
+    Object.entries(payloadObj).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) form.append(k, String(v));
+    });
+    // let axios set the multipart boundary header automatically
+    const { data } = await api.post("/api/datasets", form);
+    return { ok: true, data };
+  } catch (e) {
+    try {
+      const m = await getS3Module();
+      await m.deleteS3Object({ ...getS3Config(), key: objectKey });
+      return { ok: false, rollback: true, error: e };
+    } catch {
+      return { ok: false, rollback: false, error: e };
+    }
+  }
+};
+
+async function buildObjectKey(userId, originalName) {
+  const m = await getS3Module();
+  return m.buildS3ObjectKey(userId, originalName);
+}
+async function sanitizeFileNameSafe(fileName) {
+  const m = await getS3Module();
+  return m.sanitizeFileName(fileName);
 }
 
 async function upload() {
   const { valid: isValid } = await formRef.value.validate();
   if (!isValid) return;
 
-  if (normalizedStorageType.value === "local" && !file.value) {
-    err.value = "请选择文件";
+  const fileValidation = validateFile(file.value);
+  if (fileValidation !== true) {
+    err.value = fileValidation;
     showError.value = true;
     return;
   }
 
-  if (normalizedStorageType.value === "s3" && !isValidHttpUrl(s3Url.value)) {
-    err.value = "请输入有效的S3预签名下载URL";
-    showError.value = true;
-    return;
-  }
-
-  msg.value = "";
-  err.value = "";
+  msg.value = err.value = "";
   uploading.value = true;
+  uploadState.value = "uploading";
+  progressPercent.value = 0;
+  speedText.value = etaText.value = "-";
+
+  const selectedFile = file.value;
+  const sanitizedName = await sanitizeFileNameSafe(selectedFile.name);
+  const objectKey = await buildObjectKey(getUploadPrefixUserId(), sanitizedName);
+  latestS3Key.value = objectKey;
+  pendingResume.value = null;
+  persistPublicS3Prefs();
 
   try {
-    const fd = new FormData();
-    fd.append("name", name.value);
-    fd.append("description", description.value);
-    fd.append("domain", domain.value);
-    fd.append("dataType", dataType.value);
-    fd.append("storage_type", normalizedStorageType.value);
-
-    if (normalizedStorageType.value === "local") {
-      fd.append("file", file.value);
+    const uploaded = await doUploadWithCurrentCredentials(selectedFile, objectKey);
+    uploadState.value = "registering";
+    const reg = await registerMetadata(uploaded, selectedFile, objectKey);
+    if (reg.ok) {
+      uploadState.value = "done";
+      msg.value = `数据集 ID: ${reg.data?.dataset?.id || "-"}（默认未上架，请前往“我的数据”进行上架）`;
+      clearSensitiveCredentials();
+      credentialJson.value = "";
+      file.value = null;
+      pendingResume.value = null;
     } else {
-      fd.append("s3Url", s3Url.value.trim());
+      uploadState.value = "failed";
+      err.value = `${reg.error?.response?.data?.message || "元数据登记失败"}。${reg.rollback ? "已尝试回滚删除 S3 对象。" : `回滚删除失败，请保存 s3Key 以便补录：${objectKey}`}`;
+      showError.value = true;
     }
+  } catch (uploadErr) {
+    uploadState.value = "failed";
+    const categorized = await classifyError(uploadErr);
+    err.value = mapUploadErrorFromCode(categorized.code);
+    showError.value = true;
+    if (categorized.code === "credentials_expired") pendingResume.value = { file: selectedFile, key: objectKey };
+  } finally {
+    uploading.value = false;
+  }
+}
 
-    const { data } = await api.post("/api/datasets", fd, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-
-    msg.value = `数据集 ID: ${data.dataset.id}（默认未上架，请去"我的数据"页面进行上架操作）`;
-    resetForm();
+async function resumeWithNewCredentials() {
+  if (!pendingResume.value || uploading.value) return;
+  err.value = "";
+  showError.value = false;
+  uploading.value = true;
+  uploadState.value = "uploading";
+  persistPublicS3Prefs();
+  try {
+    const { file: selectedFile, key: objectKey } = pendingResume.value;
+    const uploaded = await doUploadWithCurrentCredentials(selectedFile, objectKey);
+    uploadState.value = "registering";
+    const reg = await registerMetadata(uploaded, selectedFile, objectKey);
+    if (reg.ok) {
+      uploadState.value = "done";
+      msg.value = `数据集 ID: ${reg.data?.dataset?.id || "-"}（默认未上架，请前往“我的数据”进行上架）`;
+      pendingResume.value = null;
+      clearSensitiveCredentials();
+      credentialJson.value = "";
+      file.value = null;
+    } else {
+      uploadState.value = "failed";
+      err.value = `${reg.error?.response?.data?.message || "元数据登记失败"}。${reg.rollback ? "已尝试回滚删除 S3 对象。" : `回滚删除失败，请保存 s3Key 以便补录：${objectKey}`}`;
+      showError.value = true;
+    }
   } catch (e) {
-    err.value = e?.response?.data?.message || "上传失败";
+    uploadState.value = "failed";
+    const categorized = await classifyError(e);
+    err.value = categorized.code === "credentials_expired" ? "凭证仍然无效或已过期，请重新输入后再试。" : mapUploadErrorFromCode(categorized.code);
     showError.value = true;
   } finally {
     uploading.value = false;
   }
 }
 
-function resetForm() {
-  name.value = "";
-  description.value = "";
-  domain.value = "general";
-  dataType.value = "csv";
-  storageType.value = "local";
-  file.value = null;
-  s3Url.value = "";
-  fileInput.value = [];
-  formRef.value?.reset();
+function cleanupSensitiveRuntime() {
+  s3ModuleRef?.abortActiveUpload();
+  clearSensitiveCredentials();
+  credentialJson.value = "";
 }
 
-watch(storageType, (mode) => {
-  if (mode === "local") {
-    s3Url.value = "";
-  } else {
-    file.value = null;
-    fileInput.value = [];
-  }
-  formRef.value?.resetValidation();
-});
-
-watch(showError, (val) => {
-  if (!val) err.value = "";
-});
+watch([region, bucket, endpoint], () => persistPublicS3Prefs());
+watch(showError, (v) => { if (!v) err.value = ""; });
+onBeforeRouteLeave(() => cleanupSensitiveRuntime());
+onBeforeUnmount(() => cleanupSensitiveRuntime());
+loadPublicS3Prefs();
 </script>
