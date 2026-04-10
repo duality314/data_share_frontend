@@ -128,6 +128,29 @@
           </v-card-text>
         </v-card>
 
+        <v-dialog v-model="showRequestDialog" max-width="700">
+          <v-card>
+            <v-card-title class="text-h6">输入公钥以请求共享</v-card-title>
+            <v-card-text>
+              <v-form>
+                <v-textarea
+                  v-model="publicKey"
+                  label="公钥 (publicKey)"
+                  placeholder="在此粘贴您的公钥"
+                  rows="6"
+                />
+              </v-form>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="showRequestDialog = false">取消</v-btn>
+              <v-btn color="primary" :loading="requesting" @click="submitRequest">
+                提交请求
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
         <!-- 数据描述 -->
         <v-card class="mb-6" elevation="2">
           <v-card-title class="bg-info text-white">
@@ -189,6 +212,9 @@ const err = ref("");
 const loading = ref(false);
 const requesting = ref(false);
 const showError = ref(false);
+const showRequestDialog = ref(false);
+const publicKey = ref("");
+const pendingDatasetId = ref(null);
 
 const previewText = computed(() => previewLines.value.join("\n"));
 
@@ -242,14 +268,30 @@ async function load() {
 //   }
 // }
 
-async function requestShare(datasetId) {
+function requestShare(datasetId) {
+  // 打开弹窗，输入公钥后再提交
+  pendingDatasetId.value = datasetId;
+  publicKey.value = "";
+  showRequestDialog.value = true;
+}
+
+async function submitRequest() {
+  if (!publicKey.value || !publicKey.value.trim()) {
+    err.value = "请输入公钥";
+    showError.value = true;
+    return;
+  }
   requesting.value = true;
   try {
-    await api.post("/api/shares/requests", {datasetId, message: "我需要用于研究/课程项目" });
-    // 提示：已提交
+    await api.post("/api/shares/requests", {
+      datasetId: pendingDatasetId.value,
+      message: "我需要用于研究/课程项目",
+      publicKey: publicKey.value,
+    });
+    showRequestDialog.value = false;
+    // 可选：显示成功提示
   } catch (e) {
-    // 提示：e.response.data.message
-    err.value = e?.response?.data?.message || "加载失败";
+    err.value = e?.response?.data?.message || "请求提交失败";
     showError.value = true;
   } finally {
     requesting.value = false;
