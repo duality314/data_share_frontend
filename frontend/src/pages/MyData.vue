@@ -171,17 +171,37 @@
             </v-list-item-subtitle>
 
             <template #append>
-              <div class="d-flex ga-2">
-                <v-btn color="success" variant="tonal" size="small"
-                  :loading="sharing._busy"
-                  @click="decide(sharing, true)">
-                  批准
-                </v-btn>
-                <v-btn color="error" variant="tonal" size="small"
-                  :loading="sharing._busy"
-                  @click="decide(sharing, false)">
-                  拒绝
-                </v-btn>
+              <div class="d-flex ga-2 align-center">
+                <v-chip
+                  v-if="sharing.status === 'approved'"
+                  size="small"
+                  color="success"
+                  variant="tonal"
+                >
+                  已批准
+                </v-chip>
+
+                <v-chip
+                  v-else-if="sharing.status === 'rejected'"
+                  size="small"
+                  color="error"
+                  variant="tonal"
+                >
+                  已拒绝
+                </v-chip>
+
+                <div v-else class="d-flex ga-2">
+                  <v-btn color="success" variant="tonal" size="small"
+                    :loading="sharing._busy"
+                    @click="decide(sharing, true)">
+                    批准
+                  </v-btn>
+                  <v-btn color="error" variant="tonal" size="small"
+                    :loading="sharing._busy"
+                    @click="decide(sharing, false)">
+                    拒绝
+                  </v-btn>
+                </div>
               </div>
             </template>
           </v-list-item>
@@ -272,6 +292,57 @@
       </v-overlay>
     </v-card>
 
+    <!-- 4. 我发起的共享请求 -->
+    <v-card class="mb-6" elevation="2">
+      <v-card-title class="bg-primary text-white d-flex align-center">
+        <v-icon class="mr-2">mdi-send</v-icon>
+        我发起的共享请求
+      </v-card-title>
+
+      <v-card-text class="pa-0">
+        <div v-if="!loading && requestsByMe.length === 0" class="text-center pa-12">
+          <v-icon size="80" color="grey-lighten-1">mdi-send</v-icon>
+          <h3 class="text-h6 mt-4 text-grey">暂无请求</h3>
+          <p class="text-body-2 text-grey mt-2">您还没有发起任何共享请求。</p>
+        </div>
+
+        <v-list v-if="requestsByMe.length" lines="two">
+          <v-list-item v-for="req in requestsByMe" :key="req.id">
+            <v-list-item-title class="font-weight-medium">{{ req.datasetName || '未知数据' }}</v-list-item-title>
+            <v-list-item-subtitle>
+              提供方：{{ req.providerName || '未知' }}
+              <span class="ml-2 text-grey">说明：{{ req.request_description || '无' }}</span>
+            </v-list-item-subtitle>
+
+            <template #append>
+              <v-chip size="small" :color="req.status === 'approved' ? 'success' : (req.status === 'rejected' ? 'error' : 'grey')" variant="tonal">
+                {{ req.status === 'approved' ? '已共享' : (req.status === 'rejected' ? '已拒绝' : '待处理') }}
+              </v-chip>
+
+              <v-btn
+                v-if="req.status === 'approved'"
+                color="primary"
+                variant="tonal"
+                size="small"
+                class="ml-2"
+                :loading="downloading"
+                @click="download(req)"
+              >
+                <v-icon start>mdi-download</v-icon>
+                下载
+              </v-btn>
+            </template>
+          </v-list-item>
+        </v-list>
+
+        <v-alert v-else type="info" variant="tonal">暂无发起的请求</v-alert>
+      </v-card-text>
+
+      <v-overlay :model-value="loading" contained class="align-center justify-center">
+        <v-progress-circular color="primary" indeterminate size="64"></v-progress-circular>
+      </v-overlay>
+    </v-card>
+
 
 
 
@@ -310,48 +381,114 @@ const loading = ref(false);
 const showError = ref(false);
 const sharings = ref([]);
 const shareds = ref([]);
+const requestsByMe = ref([]);
 const downloading = ref(false);
 
 // 我的共享
 async function fetchSharing() {
   const { data } = await api.get("/api/shares/sharing-with-others");
-  sharings.value = data.sharing.map(x => ({ ...x, is_shared: false }));
+  sharings.value = (data.sharing || []).map(x => ({
+    ...x,
+    _busy: false,
+  }));
 }
-async function decide(r, status) {
-
-  await api.post("/api/shares/update", {shareId: r.id,isShared: status});
-  await fetchSharing();
+async function decide(r, statusBool) {
+  r._busy = true;
+  const newStatus = statusBool ? 'approved' : 'rejected';
+  try {
+    // 后端 update API 期望字段名为 isApproved
+    await api.patch(`/api/shares/${r.id}`, { isApproved: statusBool });
+    // 本地更新状态以即时反馈
+    r.status = newStatus;
+    r.isShared = statusBool;
+    r.responded_at = new Date().toISOString();
+  } catch (e) {
+    err.value = e?.response?.data?.message || "操作失败";
+    showError.value = true;
+  } finally {
+    r._busy = false;
+  }
 }
 onMounted(fetchSharing);
 
 //共享给我的
 async function fetchSharedWithMe() {
   const { data } = await api.get("/api/shares/shared-with-me");
-  shareds.value = data.shared.map(x => ({ ...x }));
+  shareds.value = (data.shared || []).map(x => ({ ...x }));
   downloading.value = false;
 }
+
+function normalizeStorageType(record) {
+  const raw = (record?.storage_type ?? record?.storageType ?? "").toString().trim().toLowerCase();
+  if (raw === "local" || raw === "s3") return raw;
+  return "";
+}
+
+function downloadBlob(data, fileName) {
+  const blob = new Blob([data]);
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName || "dataset";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 async function download(r) {
+  err.value = "";
   downloading.value = true;
   try {
-    // 用 blob 下载文件
-    const resp = await api.get(`/api/datasets/${r.datasetId}/download`, { responseType: "blob" });
+    const datasetId = r?.datasetId;
+    if (!datasetId) {
+      throw new Error("缺少 datasetId，无法下载");
+    }
 
-    const blob = new Blob([resp.data]);
-    const url = window.URL.createObjectURL(blob);
+    const storageType = normalizeStorageType(r);
+    if (!storageType) {
+      throw new Error("缺少 storage_type，无法判断下载方式");
+    }
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${r.datasetName || "dataset"}`; // 可加后缀
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    if (storageType === "local") {
+      const resp = await api.get(`/api/datasets/${datasetId}/download`, {
+        responseType: "blob",
+      });
+      downloadBlob(resp.data, `${r.datasetName || "dataset"}`);
+      return;
+    }
 
-    window.URL.revokeObjectURL(url);
+    const { data } = await api.get(`/api/datasets/${datasetId}/download-url`);
+    const downloadUrl = data?.downloadUrl;
+    if (!downloadUrl) {
+      throw new Error("下载链接无效");
+    }
+    window.open(downloadUrl, "_blank", "noopener");
+  } catch (e) {
+    err.value = e?.response?.data?.message || e?.message || "下载失败";
+    showError.value = true;
+    console.error("download error", e);
   } finally {
     downloading.value = false;
   }
 }
 onMounted(fetchSharedWithMe);
+
+// 我发起的请求
+async function fetchRequestsByMe() {
+  try {
+    const { data } = await api.get('/api/shares/requests-by-me');
+    // 后端返回 { requests: [...] }
+    requestsByMe.value = (data.requests || []).map(x => ({
+      ...x,
+      status: x.status,
+    }));
+  } catch (e) {
+    // 非阻塞性错误
+    console.error('fetchRequestsByMe error', e);
+  }
+}
+onMounted(fetchRequestsByMe);
 
 
 async function load() {
