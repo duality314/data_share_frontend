@@ -817,6 +817,3 @@ api.interceptors.request.use((config) => {
 
 ---
 
-**祝开发顺利！** 🎉
-
-如有疑问，请联系前端开发人员。

@@ -8,6 +8,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1032.0",
+    "@aws-sdk/lib-storage": "^3.1032.0",
     "@element-plus/icons-vue": "^2.3.2",
     "@mdi/font": "^7.4.47",
     "axios": "^1.7.9",
