@@ -424,8 +424,27 @@ function normalizeStorageType(record) {
   return "";
 }
 
-function downloadBlob(data, fileName) {
-  const blob = new Blob([data]);
+function parseDownloadFileName(contentDisposition) {
+  if (!contentDisposition) return "";
+
+  const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encoded?.[1]) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      return encoded[1];
+    }
+  }
+
+  const quoted = contentDisposition.match(/filename="([^"]+)"/i);
+  if (quoted?.[1]) return quoted[1];
+
+  const plain = contentDisposition.match(/filename=([^;]+)/i);
+  return plain?.[1]?.trim() || "";
+}
+
+function downloadBlob(data, fileName, contentType) {
+  const blob = new Blob([data], { type: contentType || "application/octet-stream" });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -454,7 +473,8 @@ async function download(r) {
       const resp = await api.get(`/api/datasets/${datasetId}/download`, {
         responseType: "blob",
       });
-      downloadBlob(resp.data, `${r.datasetName || "dataset"}`);
+      const headerFileName = parseDownloadFileName(resp.headers?.["content-disposition"]);
+      downloadBlob(resp.data, headerFileName || `${r.datasetName || "dataset"}`, resp.headers?.["content-type"]);
       return;
     }
 
